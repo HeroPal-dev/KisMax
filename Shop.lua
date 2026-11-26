@@ -23,6 +23,7 @@ local GREEN, RED, GREY, GOLD = "|cff4dd17a", "|cffff5555", "|cff999999", "|cffff
 local panel, rows, merchantButton
 local found = {}     -- [itemID] = { n = units at or under the limit, cost, cheapest, kind } after a search
 local searching = false
+local announce = false -- the search the auction house opening started: say in chat what can be bought
 
 ---------------------------------------------------------------------------------------------------
 -- The list
@@ -194,14 +195,28 @@ end
 
 local function AfterSearch()
     searching = false
+    local lines, total = {}, 0
     for _, x in ipairs(AuctionItems()) do
         local n, cost, cheapest = Affordable(x.itemID, x.left, x.e.max)
         found[x.itemID] = { n = n, cost = cost, cheapest = cheapest, kind = NPP.Live.Kind(x.itemID) }
+        if n > 0 then
+            lines[#lines + 1] = L("%s: %d of %d at or under the limit (%s)"):format(NPP.Profit.ItemName(x.itemID), n, x.left, NPP.Coins(cost))
+            total = total + cost
+        end
+    end
+    if announce then
+        announce = false
+        if #lines > 0 then
+            NPP.Print(L("Shopping list: can be bought now for about %s:"), NPP.Coins(total))
+            for _, line in ipairs(lines) do NPP.Print("  %s", line) end
+        else
+            NPP.Print(L("Shopping list: everything is dearer than its limit right now."))
+        end
     end
     Changed()
 end
 
-function Shop.Search()
+function Shop.Search(say)
     if not HouseOpen() then return NPP.Print(L("Open the auction house first: lots can be read only there.")) end
     if NPP.Live.Busy() then return NPP.Print(L("Lots are being refreshed already.")) end
     local ids, need = {}, {}
@@ -211,6 +226,7 @@ function Shop.Search()
     end
     if #ids == 0 then return Changed() end
     searching = true
+    announce = say and true or false
     wipe(found)
     Changed()
     if not NPP.Live.Refresh(ids, need, { quiet = true, onDone = function() NPP.Safe("shop search", AfterSearch) end }) then
@@ -619,6 +635,12 @@ NPP.Module("shop", { "core" }, function()
             NPP.Safe("shop merchant", Shop.UpdateMerchant)
         elseif event == "AUCTION_HOUSE_SHOW" then
             NPP.Safe("shop panel", Shop.ShowPanel, false)
+            -- check the list on its own a moment after the auction house opens
+            if NPP.Get("autoShopCheck") and #AuctionItems() > 0 then
+                C_Timer.After(2, function()
+                    if HouseOpen() and not searching and not NPP.Live.Busy() then NPP.Safe("shop auto check", Shop.Search, true) end
+                end)
+            end
         elseif event == "AUCTION_HOUSE_CLOSED" then
             searching = false
             wipe(found)
