@@ -3,7 +3,7 @@
 ## Notes: Profit, buy plans, levelling plans and trading for the NaowhForever Professions window. Not made by Naowh.
 ## Notes-ruRU: Прибыль, планы закупки и прокачки, торговля для окна профессий NaowhForever. Неофициальное дополнение.
 ## Author: KisMax
-## Version: 0.9.11
+## Version: 0.9.12
 ## Dependencies: NaowhForever, NaowhForever_Professions
 ## OptionalDeps: NaowhForever_QoL, TradeSkillMaster
 ## SavedVariables: KisMaxDB, KisMaxAH

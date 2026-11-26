@@ -60,28 +60,112 @@ local function Chars()
     return NPP.db.chars
 end
 
+-- The realm name: GetRealmName() is "" for a moment after logging in on Forever.
+local function Realm()
+    local ns = NPP.ns
+    local ok, name = false, nil
+    if ns and type(ns.RealmName) == "function" then ok, name = pcall(ns.RealmName) end
+    if ok and type(name) == "string" and name ~= "" then return name end
+    return GetRealmName() or ""
+end
+
+local function SameRealm(a, b) return a == nil or a == "" or b == "" or a == b end
+
 local function SaveMe()
     local guid = UnitGUID("player")
     if not (guid and GetProfessions) then return end
+    local profs = {}
+    for _, index in pairs({ GetProfessions() }) do
+        local name, _, skill, cap, _, _, line = GetProfessionInfo(index)
+        if line then profs[line] = { skill = skill or 0, cap = cap or 0, name = name } end
+    end
     local me = Chars()[guid] or {}
     Chars()[guid] = me
     me.name, me.class = UnitName("player"), select(2, UnitClass("player"))
-    me.realm, me.faction, me.at = GetRealmName(), UnitFactionGroup("player"), time()
-    me.profs = {}
-    for _, index in pairs({ GetProfessions() }) do
-        local name, _, skill, cap, _, _, line = GetProfessionInfo(index)
-        if line then me.profs[line] = { skill = skill or 0, cap = cap or 0, name = name } end
-    end
+    me.faction, me.at = UnitFactionGroup("player"), time()
+    local realm = Realm()
+    if realm ~= "" then me.realm = realm end
+    -- professions are not known yet just after logging in (and not any more while logging out): keep the last
+    if next(profs) then me.profs = profs end
 end
--- Other characters of yours on this realm with a profession that has recipes: { { guid, char, id, name, skill, cap } }
+
+local function RecipeDataOf(line)
+    local ns = NPP.ns
+    local d = ns and type(ns.RecipeData) == "table" and ns.RecipeData[line]
+    return d and type(d.recipes) == "table" and #d.recipes > 0 and d or nil
+end
+
+local function ProfNameOf(line, d)
+    return d and d.skillSpell and C_Spell.GetSpellName(d.skillSpell) or ("#" .. tostring(line))
+end
+
+-- A character's skill estimated from the recipes Naowh remembers it learned: the highest skill one needs, and the
+-- trainer rank cap above it.
+local function Estimate(guid, line, d)
+    local ns = NPP.ns
+    local all = ns and type(ns.AccountSettings) == "function" and ns.AccountSettings().profMakes
+    local makes = type(all) == "table" and type(all[guid]) == "table" and all[guid] or {}
+    local learned = {}
+    for _, m in pairs(makes) do
+        if type(m) == "table" and m.prof == line and m.recipe then learned[m.recipe] = true end
+    end
+    local skill = 1
+    for _, r in ipairs(d.recipes) do
+        if r.spell and learned[r.spell] and (r.skill or 0) > skill then skill = r.skill end
+    end
+    local cap = 75
+    for _, rk in ipairs(d.ranks or {}) do
+        if (rk.cap or 0) >= skill and (cap < skill or rk.cap < cap) then cap = rk.cap end
+    end
+    return skill, math.max(cap, skill)
+end
+
+-- Other characters of yours on this realm with a profession that has recipes:
+-- { { guid, char = { name, class, faction }, id, name, skill, cap, estimated } }
+-- Saved by KisMax when that character logged in; otherwise from Naowh's alt links (profession known, skill estimated).
 local function AltProfessions()
-    local list, me, realm = {}, UnitGUID("player"), GetRealmName()
+    local list, have, me, realm = {}, {}, UnitGUID("player"), Realm()
     for guid, ch in pairs(Chars()) do
-        if guid ~= me and type(ch) == "table" and ch.realm == realm and type(ch.profs) == "table" then
+        if guid ~= me and type(ch) == "table" and SameRealm(ch.realm, realm) and type(ch.profs) == "table" then
             for line, p in pairs(ch.profs) do
-                local d = NPP.ns and type(NPP.ns.RecipeData) == "table" and NPP.ns.RecipeData[line]
-                if d and type(d.recipes) == "table" and #d.recipes > 0 then
+                if RecipeDataOf(line) then
+                    have[guid .. ":" .. line] = true
                     list[#list + 1] = { guid = guid, char = ch, id = line, name = p.name, skill = p.skill, cap = p.cap }
+                end
+            end
+        end
+    end
+    local ns = NPP.ns
+    local links = ns and type(ns.AccountSettings) == "function" and ns.AccountSettings().profLinks
+    for guid, alt in pairs(type(links) == "table" and links or {}) do
+        if guid ~= me and type(alt) == "table" and SameRealm(alt.realm, realm) and type(alt.links) == "table" then
+            for line, saved in pairs(alt.links) do
+                local d = RecipeDataOf(line)
+                if d and not have[guid .. ":" .. line] then
+                    local skill, cap = Estimate(guid, line, d)
+                    have[guid .. ":" .. line] = true
+                    list[#list + 1] = { guid = guid, char = { name = alt.name, class = alt.class, faction = alt.faction },
+                        id = line, name = type(saved) == "table" and saved.name or nil, skill = skill, cap = cap, estimated = true }
+                end
+            end
+        end
+    end
+    -- and the professions of Naowh's memory of learned recipes (profMakes), for characters KisMax knows by name
+    local makes = ns and type(ns.AccountSettings) == "function" and ns.AccountSettings().profMakes
+    for guid, m in pairs(type(makes) == "table" and makes or {}) do
+        local ch = Chars()[guid]
+        if guid ~= me and type(ch) == "table" and ch.name and SameRealm(ch.realm, realm) and type(m) == "table" then
+            local lines = {}
+            for _, x in pairs(m) do
+                if type(x) == "table" and x.prof then lines[x.prof] = true end
+            end
+            for line in pairs(lines) do
+                local d = RecipeDataOf(line)
+                if d and not have[guid .. ":" .. line] then
+                    have[guid .. ":" .. line] = true
+                    local skill, cap = Estimate(guid, line, d)
+                    list[#list + 1] = { guid = guid, char = ch, id = line, name = ProfNameOf(line, d), skill = skill, cap = cap,
+                        estimated = true }
                 end
             end
         end
@@ -147,11 +231,11 @@ local function Profession()
     local altGUID = NPP.Get("levelChar")
     planFaction, planAlt = nil, nil
     if want and altGUID and altGUID ~= UnitGUID("player") then
-        local ch = Chars()[altGUID]
-        local p = type(ch) == "table" and type(ch.profs) == "table" and ch.profs[want]
-        if p then
-            planFaction, planAlt = ch.faction, ch
-            return want, p.skill or 1, p.cap or 75, p.name or ProfName(want), true, altGUID
+        for _, a in ipairs(AltProfessions()) do
+            if a.guid == altGUID and a.id == want then
+                planFaction, planAlt = a.char.faction, a.char
+                return want, a.skill or 1, a.cap or 75, a.name or ProfName(want), true, altGUID, a.estimated
+            end
         end
     end
     local mine = MyProfessions()
@@ -578,7 +662,7 @@ local function Beats(a, b)
 end
 
 function Leveling.Count()
-    local profID, skill, cap, profName, known, altGUID = Profession()
+    local profID, skill, cap, profName, known, altGUID, estimated = Profession()
     if not profID then
         result = nil
         return Leveling.Open(true)
@@ -623,6 +707,7 @@ function Leveling.Count()
     end
     best.runs = runs
     best.who, best.alt, best.typedFrom, best.realSkill = who, altGUID, skill ~= realSkill, realSkill
+    best.estimated = estimated and not best.typedFrom
     result = best
     NPP.Debug("leveling: %d -> %d, %d segments, %d recipes counted, %d routes tried", skill, target, #best.segments,
         #best.cands, runs)
@@ -1035,6 +1120,10 @@ function Leveling.Render()
             text = text .. "\n" .. GREY .. L("%s's profession as saved when that character last logged in; learned recipes as Naowh remembers them. Buy here, send by mail.")
                 :format(r.who or "?") .. "|r"
         end
+        if r.estimated then
+            text = text .. "\n" .. GOLD .. L("%s's skill is a guess from the recipes learned (about %d): log in with %s once, or type it with \"From\".")
+                :format(r.who or "?", r.skill or 0, r.who or "?") .. "|r"
+        end
         if r.typedFrom then
             text = text .. "\n" .. GREY .. L("Start typed by hand: %d (the real skill is %d).")
                 :format(r.skill or 0, r.realSkill or 0) .. "|r"
@@ -1167,7 +1256,8 @@ local function ChooseOther(owner)
         for _, a in ipairs(alts) do
             local color = a.char.class and C_ClassColor and C_ClassColor.GetClassColor(a.char.class)
             local who = color and color:WrapTextInColorCode(a.char.name or "?") or (a.char.name or "?")
-            root:CreateButton(("%s: %s %d/%d"):format(who, a.name or ProfName(a.id), a.skill or 0, a.cap or 0), function()
+            local skill = a.estimated and ("~%d"):format(a.skill or 0) or ("%d/%d"):format(a.skill or 0, a.cap or 0)
+            root:CreateButton(("%s: %s %s"):format(who, a.name or ProfName(a.id), skill), function()
                 Leveling.Choose(a.id, a.guid)
             end)
         end
@@ -1236,7 +1326,7 @@ NPP.Module("leveling", { "core", "ui" }, function()
     local watch, waiting = CreateFrame("Frame"), false
     for _, e in ipairs({ "SKILL_LINES_CHANGED", "TRADE_SKILL_LIST_UPDATE", "PLAYER_LOGOUT" }) do pcall(watch.RegisterEvent, watch, e) end
     watch:SetScript("OnEvent", function(_, event)
-        if event == "PLAYER_LOGOUT" then return NPP.Safe("leveling save", SaveMe) end
+        if event == "PLAYER_LOGOUT" then return NPP.Safe("leveling save", SaveMe) end -- keeps the last professions
         if waiting then return end
         waiting = true
         C_Timer.After(2, function()

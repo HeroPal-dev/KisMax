@@ -442,6 +442,8 @@ local RU = {
     ["Where to learn:"] = "Где изучить:",
     ["gear"] = "вещь",
     ["From: %d"] = "От: %d",
+    ["%s's skill is a guess from the recipes learned (about %d): log in with %s once, or type it with \"From\"."] =
+        "Навык %s угадан по изученным рецептам (примерно %d): зайди %s один раз или введи его в «От».",
     ["Click: type the skill to start from"] = "Клик: ввести навык, с которого начать",
     ["Right-click: the character's real skill"] = "Правый клик: настоящий навык персонажа",
     ["Your other characters"] = "Другие персонажи",
