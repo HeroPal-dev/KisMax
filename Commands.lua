@@ -25,6 +25,7 @@ local function Help()
     NPP.Print(L("  /km explore - profession overview: every profession's recipes by profit per hour"))
     NPP.Print(L("  /km shop [clear|naowh|km] - our shopping list (naowh/km: where To shopping list goes)"))
     NPP.Print(L("  /km history [reset] - what you spent and earned by day (reset: clear it)"))
+    NPP.Print(L("  /km selftest - check everything KisMax relies on (send me a screenshot of it)"))
     NPP.Print(L("  /km session - session plan: several profitable recipes with your money and bag space"))
     NPP.Print(L("  /km level [target] - levelling plan: the cheapest way to the target skill"))
     NPP.Print(L("  /km ledger [reset] - what you really spent and earned (reset: start counting again)"))
@@ -251,6 +252,8 @@ local function Handle(msg)
         Help()
     elseif cmd == "help" then
         Help()
+    elseif cmd == "selftest" or cmd == "test" then
+        NPP.SelfTest.Run()
     elseif cmd == "status" then
         Status()
     elseif cmd == "debug" then

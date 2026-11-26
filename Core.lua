@@ -95,6 +95,7 @@ function NPP.Report(where, err)
     NPP.Debug("error in %s: %s", where, err)
     if reported[where] then return end
     reported[where] = true
+    NPP.errorCount = (NPP.errorCount or 0) + 1
     NPP.Print(L("Error in '%s' (details in BugSack). The Naowh window keeps working."), where)
     local handler = geterrorhandler and geterrorhandler()
     if handler then pcall(handler, Format("KisMax [%s]: %s", where, err)) end
