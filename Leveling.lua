@@ -223,6 +223,66 @@ local function Cooldown(spell)
     return (NPP.RecipeCooldown(spell))
 end
 
+-- Enchants make no item: they go on a piece of your own gear, the skill point comes from the cast, nothing
+-- comes back. Naowh's P.EnchantSlots says where each goes: { item class, inventory type bits, subclass bits }.
+local function Bit(mask, n) return math.floor(mask / 2 ^ n) % 2 == 1 end
+
+local function Fits(slot, class, subclass, inv)
+    if slot[1] ~= class then return false end
+    return (slot[3] == 0 or Bit(slot[3], subclass or 0)) and (slot[2] == 0 or Bit(slot[2], inv or 0))
+end
+
+local gearCache, gearAt = nil, 0
+-- { {class, subclass, inv}, ... } of what you wear and carry
+local function Gear()
+    if gearCache and GetTime() - gearAt < 5 then return gearCache end
+    gearCache, gearAt = {}, GetTime()
+    local function Add(id)
+        if not id then return end
+        local _, _, _, _, _, class, sub = C_Item.GetItemInfoInstant(id)
+        local inv = C_Item.GetItemInventoryTypeByID and C_Item.GetItemInventoryTypeByID(id)
+        if class then gearCache[#gearCache + 1] = { class, sub, inv } end
+    end
+    for slot = 1, 19 do Add(GetInventoryItemID("player", slot)) end
+    for bag = 0, (NUM_BAG_SLOTS or 4) do
+        for i = 1, C_Container.GetContainerNumSlots(bag) or 0 do Add(C_Container.GetContainerItemID(bag, i)) end
+    end
+    return gearCache
+end
+
+local INV_NAMES = { [1] = "INVTYPE_HEAD", [3] = "INVTYPE_SHOULDER", [5] = "INVTYPE_CHEST", [6] = "INVTYPE_WAIST",
+    [7] = "INVTYPE_LEGS", [8] = "INVTYPE_FEET", [9] = "INVTYPE_WRIST", [10] = "INVTYPE_HAND", [11] = "INVTYPE_FINGER",
+    [16] = "INVTYPE_CLOAK", [20] = "INVTYPE_CHEST" }
+
+-- "bracers", "shield", "two-handed weapon"...
+function Leveling.SlotName(slot)
+    if slot[1] == 2 then
+        return slot[3] == 1378 and L("two-handed weapon") or L("weapon")
+    end
+    if slot[1] == 4 and slot[2] == 0 and Bit(slot[3], 6) then return _G.INVTYPE_SHIELD or L("shield") end
+    local names, seen = {}, {}
+    for n, key in pairs(INV_NAMES) do
+        local s = _G[key]
+        if slot[2] ~= 0 and Bit(slot[2], n) and s and not seen[s] then
+            seen[s] = true
+            names[#names + 1] = s
+        end
+    end
+    table.sort(names)
+    return #names > 0 and table.concat(names, " / ") or L("gear")
+end
+
+local function EnchantInfo(spell)
+    local P = NPP.P
+    local slot = P and type(P.EnchantSlots) == "table" and P.EnchantSlots[spell]
+    if type(slot) ~= "table" then return nil end
+    local have = false
+    for _, g in ipairs(Gear()) do
+        if Fits(slot, g[1], g[2], g[3]) then have = true break end
+    end
+    return { slot = slot, name = Leveling.SlotName(slot), have = have }
+end
+
 local function Candidates(profID, from, to, excluded)
     local data = RecipeData()[profID]
     local list = {}
@@ -235,7 +295,12 @@ local function Candidates(profID, from, to, excluded)
         local grey = r.grey
         -- the game's own grey for the open profession beats the data
         if ri and tonumber(ri.maxTrivialLevel) and ri.maxTrivialLevel > 0 then grey = ri.maxTrivialLevel end
-        if r.spell and r.item and grey and yellow and yellow <= grey and grey > from
+        -- an enchant (no item) counts too: cast on your own gear, nothing back
+        local enchant = not r.item and r.spell and EnchantInfo(r.spell) or nil
+        if not enchant and not r.item and r.spell and profID == 333 then
+            enchant = { name = L("gear"), have = true } -- an enchant Naowh has no slot for
+        end
+        if r.spell and (r.item or enchant) and grey and yellow and yellow <= grey and grey > from
             and not (excluded and excluded[r.spell]) and not Cooldown(r.spell) then
             local learned
             if learnedSet then learned = learnedSet[r.spell] == true else learned = ri and ri.learned or false end
@@ -243,6 +308,7 @@ local function Candidates(profID, from, to, excluded)
             if not learned then sources, learnCost, how = Sources(r, data) end
             if learnCost then
                 local ok, v = pcall(NPP.Profit.Get, r.spell, r.item)
+                if ok and v and enchant then v.made = 1 end
                 if ok and v and v.missing == 0 and #v.parts > 0 then
                     local c = {
                         r = r, v = v, name = (ri and ri.name) or C_Spell.GetSpellName(r.spell) or tostring(r.spell),
@@ -250,8 +316,9 @@ local function Candidates(profID, from, to, excluded)
                         available = learned and 0 or math.min(r.skill or yellow, yellow),
                         yellow = yellow, grey = grey, liveGrey = grey ~= r.grey,
                         vendor = v.vendorSale or 0, de = v.deSale, ahLeft = 0,
-                        secs = NPP.Profit.CraftSeconds(r.spell), done = 0, acc = 0,
+                        secs = NPP.Profit.CraftSeconds(r.spell), done = 0, acc = 0, enchant = enchant,
                     }
+                    if enchant then c.vendor, c.de, c.ah = 0, nil, nil end
                     if v.ahSale then
                         local sold = NPP.PriceSource.SoldPerDay(v.output)
                         if sold then c.ah, c.ahLeft = v.ahSale, math.floor(sold * days) end
@@ -526,10 +593,13 @@ function Leveling.ToQueue()
     local Q = NPP.P.CraftQueue
     if not (Q and type(Q.Add) == "function") then return NPP.Print(L("Naowh's crafting queue is not available.")) end
     local mine = type(Q.List) == "function" and Q.List() or nil
-    local bits, later = {}, {}
+    local bits, later, enchants = {}, {}, {}
     for _, c in ipairs(result.cands) do
         local want = c.done or 0
-        if want > 0 then
+        if want > 0 and c.enchant then
+            -- the queue cannot pick the item an enchant goes on
+            enchants[#enchants + 1] = ("%dx %s"):format(want, c.name)
+        elseif want > 0 then
             if not c.learned then
                 later[#later + 1] = c.name
             else
@@ -556,6 +626,10 @@ function Leveling.ToQueue()
     end
     if #later > 0 then
         NPP.Print(L("Not queued yet (not learned or not all in your bags): %s."), table.concat(later, ", "))
+    end
+    if #enchants > 0 then
+        NPP.Print(L("Enchants are cast by hand on your own gear (the item slot under the recipe, then Create): %s."),
+            table.concat(enchants, ", "))
     end
 end
 
@@ -618,6 +692,15 @@ local function RowTooltip(self)
         .. (c.liveGrey and (" " .. L("(grey from the game)")) or ""), 0.8, 0.8, 0.8)
     if seg.crafts > 0 then
         GameTooltip:AddDoubleLine(L("Reagents per craft"), NPP.Coins(math.floor(seg.spend / seg.crafts)), 1, 1, 1, 1, 1, 1)
+    end
+    if c.enchant then
+        GameTooltip:AddLine(L("Enchant your own gear: %s. The point comes from the cast, nothing comes back."):format(c.enchant.name),
+            0.6, 0.9, 1, true)
+        if not c.enchant.have then
+            GameTooltip:AddLine(L("You have no such item: buy any cheap one from a merchant (any quality will do)."), 1, 0.4, 0.4, true)
+        end
+        GameTooltip:Show()
+        return
     end
     GameTooltip:AddDoubleLine(L("Merchant pays per craft"), NPP.Coins(c.vendor), 1, 1, 1, 1, 1, 1)
     if c.de then GameTooltip:AddDoubleLine(L("Disenchanted per craft"), NPP.Coins(c.de), 1, 1, 1, 1, 1, 1) end
@@ -815,7 +898,9 @@ function Leveling.Render()
         if seg then
             local c = row.cells
             c[1]:SetText(("%d-%d"):format(seg.from, seg.to))
-            c[2]:SetText((seg.c.learned and "" or (GOLD .. "* |r")) .. seg.c.name)
+            local e = seg.c.enchant
+            c[2]:SetText((seg.c.learned and "" or (GOLD .. "* |r")) .. seg.c.name
+                .. ((e and not e.have) and ("|cffff6060 (" .. L("no %s"):format(e.name) .. ")|r") or ""))
             c[3]:SetText(tostring(seg.crafts))
             c[4]:SetText(NPP.Coins(math.floor(seg.spend + 0.5)))
             c[5]:SetText(NPP.Coins(math.floor(seg.back + 0.5)))
@@ -855,6 +940,9 @@ function Leveling.Render()
                 or L("You do not have this profession: every recipe counts as not learned.")) .. "|r"
         end
         text = text .. "\n" .. GREY .. L("Expected values: a craft gives a point with its colour's chance. Reagents from your bags first, then the cheapest lots. Recipes with a cooldown (transmutes) are left out.") .. "|r"
+        if r.profID == 333 then
+            text = text .. "\n" .. GREY .. L("Enchants go on your own gear: you pay only the reagents, nothing comes back.") .. "|r"
+        end
         if (r.runs or 1) > 1 then
             text = text .. "\n" .. GREY .. L("Routes tried: %d (the cheapest is shown)."):format(r.runs) .. "|r"
         end

@@ -440,6 +440,19 @@ local RU = {
     ["Expected values: a craft gives a point with its colour's chance. Reagents from your bags first, then the cheapest lots. Recipes with a cooldown (transmutes) are left out."] =
         "Ожидаемые значения: крафт даёт очко с шансом своего цвета. Реагенты сначала из сумок, потом самые дешёвые лоты. Рецепты с перезарядкой (трансмутации) не берутся.",
     ["Where to learn:"] = "Где изучить:",
+    ["gear"] = "вещь",
+    ["Enchants are cast by hand on your own gear (the item slot under the recipe, then Create): %s."] =
+        "Чары накладывай сам на свою вещь (слот вещи под рецептом, затем «Создать»): %s.",
+    ["Enchants go on your own gear: you pay only the reagents, nothing comes back."] =
+        "Чары накладываются на свои вещи: платишь только за реагенты, назад ничего не возвращается.",
+    ["weapon"] = "оружие",
+    ["two-handed weapon"] = "двуручное оружие",
+    ["shield"] = "щит",
+    ["no %s"] = "нет: %s",
+    ["Enchant your own gear: %s. The point comes from the cast, nothing comes back."] =
+        "Накладывается на свою вещь: %s. Очко даёт само наложение, назад ничего не возвращается.",
+    ["You have no such item: buy any cheap one from a merchant (any quality will do)."] =
+        "У тебя нет такой вещи: купи любую дешёвую у торговца (качество не важно).",
     ["auction house"] = "аукцион",
     ["Click: put a waypoint there"] = "Клик: поставить путевую точку",
     ["* To learn (click: waypoint):"] = "* Изучить (клик — путевая точка):",
