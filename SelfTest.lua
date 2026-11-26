@@ -57,7 +57,7 @@ function SelfTest.Run()
         Line(state, L("Feature %s"), f)
     end
     local mods = { "profit", "chef", "disenchant", "ledger", "planpanel", "explorer", "history", "session", "leveling",
-        "shop", "hub", "ui", "sort", "filters", "scan", "live", "sell" }
+        "shop", "hub", "ui", "sort", "filters", "scan", "live", "sell", "pricefloor" }
     local off = {}
     for _, m in ipairs(mods) do
         if not NPP.Started(m) then off[#off + 1] = m end

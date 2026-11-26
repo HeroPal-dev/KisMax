@@ -336,6 +336,11 @@ local RU = {
     ["tools and settings..."] = "инструменты и настройки...",
     -- v0.8: levelling plan
     ["Levelling plan"] = "План прокачки",
+    ["cost per item"] = "себестоимость за шт.",
+    ["on the AH not below"] = "на аукционе не дешевле",
+    ["(a merchant / disenchanting pays more below it)"] = "(дешевле выгоднее сдать торговцу / распылить)",
+    ["(after the 5% cut)"] = "(с учётом 5% комиссии)",
+    ["Cost and lowest AH price on crafted items' tooltips"] = "Себестоимость и мин. цена аукциона в подсказке крафта",
     -- self-test
     ["  /km selftest - check everything KisMax relies on (send me a screenshot of it)"] =
         "  /km selftest - проверить всё, на что опирается KisMax (пришли скриншот)",

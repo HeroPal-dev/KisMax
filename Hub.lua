@@ -171,6 +171,7 @@ local SETTINGS = {
       text = function(v) return v .. "%" end, help = "DEPTH_HELP" },
     { kind = "toggle", key = "deChannel", label = "Count disenchanting (if your Enchanting can)" },
     { kind = "toggle", key = "tooltipDE", label = "Disenchant value on item tooltips" },
+    { kind = "toggle", key = "tooltipFloor", label = "Cost and lowest AH price on crafted items' tooltips" },
     { kind = "toggle", key = "feedNaowh", label = "Give our full scan to Naowh when its scan gives up", help = "FEED_HELP" },
     { header = "Buy plans" },
     { kind = "cycle", key = "budget", label = "Money for purchases", values = BUDGETS, text = BudgetText, help = "BUDGET_HELP" },

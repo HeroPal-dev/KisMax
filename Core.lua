@@ -38,6 +38,7 @@ NPP.DEFAULTS = {
     exploreMaxSkill = false,
     shopTarget = "npp",     -- "To shopping list" goes to "npp" (our list with price limits) or "naowh"
     fitText = true,
+    tooltipFloor = true,    -- "cost per item" and "on the AH not below" on tooltips of items your recipes make
     ourProfitBlock = true,  -- our numbers in Naowh's Buy for / Sell for / Profit lines by the Create button
     feedNaowh = true,       -- when Naowh's full scan times out but ours read it: give Naowh the prices
     minimapButton = true,   -- KisMax button on the minimap
