@@ -220,8 +220,7 @@ local STICKY = 0.10   -- keep the current recipe unless another point is at leas
 local MAX_RUNS = 10   -- routes counted when trying without bought recipes
 
 local function Cooldown(spell)
-    local P = NPP.P
-    return P and type(P.CooldownRecipes) == "table" and P.CooldownRecipes[spell] and true or false
+    return (NPP.RecipeCooldown(spell))
 end
 
 local function Candidates(profID, from, to, excluded)
@@ -855,7 +854,7 @@ function Leveling.Render()
             text = text .. "\n" .. GREY .. (r.known and L("Learned recipes as Naowh remembers them (open the profession once to update).")
                 or L("You do not have this profession: every recipe counts as not learned.")) .. "|r"
         end
-        text = text .. "\n" .. GREY .. L("Expected values: a craft gives a point with its colour's chance. Reagents from your bags first, then the cheapest lots.") .. "|r"
+        text = text .. "\n" .. GREY .. L("Expected values: a craft gives a point with its colour's chance. Reagents from your bags first, then the cheapest lots. Recipes with a cooldown (transmutes) are left out.") .. "|r"
         if (r.runs or 1) > 1 then
             text = text .. "\n" .. GREY .. L("Routes tried: %d (the cheapest is shown)."):format(r.runs) .. "|r"
         end

@@ -437,8 +437,8 @@ local RU = {
         "Купить на %s, рецепты %s, вернётся %s (торговец %s, распыление %s, аукцион %s).",
     ["From your bags: reagents worth %s (counted in the steps, not in the cost above)."] =
         "Из сумок: реагентов на %s (учтены в шагах, но не в сумме выше).",
-    ["Expected values: a craft gives a point with its colour's chance. Reagents from your bags first, then the cheapest lots."] =
-        "Ожидаемые значения: крафт даёт очко с шансом своего цвета. Реагенты сначала из сумок, потом самые дешёвые лоты.",
+    ["Expected values: a craft gives a point with its colour's chance. Reagents from your bags first, then the cheapest lots. Recipes with a cooldown (transmutes) are left out."] =
+        "Ожидаемые значения: крафт даёт очко с шансом своего цвета. Реагенты сначала из сумок, потом самые дешёвые лоты. Рецепты с перезарядкой (трансмутации) не берутся.",
     ["Where to learn:"] = "Где изучить:",
     ["auction house"] = "аукцион",
     ["Click: put a waypoint there"] = "Клик: поставить путевую точку",

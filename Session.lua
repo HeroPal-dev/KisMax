@@ -118,6 +118,9 @@ local function Candidates()
                         if byDemand < c.cap then c.cap, c.demandCap = byDemand, true end
                     end
                 end
+                -- a recipe on a cooldown (transmutes): one craft, and only when it is ready now
+                local cd, left = NPP.RecipeCooldown(id)
+                if cd then c.cap, c.cooldown = (left > 0) and 0 or 1, true end
                 c.hour = v.profit / math.max(v.seconds or c.base, 0.1)
                 if c.cap > 0 then list[#list + 1] = c end
             end

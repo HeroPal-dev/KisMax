@@ -279,6 +279,41 @@ function NPP.IsRecipeSpell(spellID)
     return recipeSpells[spellID] == true or openSpells[spellID] == true
 end
 
+-- Does a recipe have a cooldown (transmutes, mooncloth...)? Returns has, seconds left now (0 = ready).
+-- Same checks as Naowh's shopping list: its classic list, what its memory of learned recipes says, the spell's
+-- base cooldown, the recipe's live cooldown. Forever's own transmutes (Legionite...) are not on Naowh's list.
+local cooldownSeen, cooldownMakes, cooldownMakesAt = {}, nil, 0
+function NPP.RecipeCooldown(spellID)
+    if not spellID then return false, 0 end
+    local P = NPP.P
+    local left, isDay = 0, false
+    if C_TradeSkillUI and C_TradeSkillUI.GetRecipeCooldown then
+        local ok, l, day = pcall(C_TradeSkillUI.GetRecipeCooldown, spellID)
+        if ok then left, isDay = tonumber(l) or 0, day and true or false end
+    end
+    if cooldownSeen[spellID] or left > 0 or isDay then
+        cooldownSeen[spellID] = true
+        return true, left
+    end
+    local has = P and type(P.CooldownRecipes) == "table" and P.CooldownRecipes[spellID] and true or false
+    if not has and GetSpellBaseCooldown then
+        local ok, base = pcall(GetSpellBaseCooldown, spellID)
+        has = ok and tonumber(base) and base > 0 or false
+    end
+    if not has and P and P.Shopping and type(P.Shopping.Makes) == "function" then
+        if not cooldownMakes or GetTime() - cooldownMakesAt > 60 then
+            cooldownMakes, cooldownMakesAt = {}, GetTime()
+            local ok, makes = pcall(P.Shopping.Makes)
+            for _, m in pairs(ok and type(makes) == "table" and makes or {}) do
+                if type(m) == "table" and m.recipe and m.cooldown then cooldownMakes[m.recipe] = true end
+            end
+        end
+        has = cooldownMakes[spellID] == true
+    end
+    if has then cooldownSeen[spellID] = true end
+    return has and true or false, left
+end
+
 local listWatch = CreateFrame("Frame")
 for _, e in ipairs({ "TRADE_SKILL_LIST_UPDATE", "TRADE_SKILL_SHOW" }) do pcall(listWatch.RegisterEvent, listWatch, e) end
 listWatch:SetScript("OnEvent", function()
