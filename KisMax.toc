@@ -1,0 +1,34 @@
+## Interface: 16001
+## Title: |cff33ccffKisMax|r
+## Notes: Profit, buy plans, levelling plans and trading for the NaowhForever Professions window. Not made by Naowh.
+## Notes-ruRU: Прибыль, планы закупки и прокачки, торговля для окна профессий NaowhForever. Неофициальное дополнение.
+## Author: KisMax
+## Version: 0.9.3
+## Dependencies: NaowhForever, NaowhForever_Professions
+## OptionalDeps: NaowhForever_QoL, TradeSkillMaster
+## SavedVariables: KisMaxDB, KisMaxAH
+
+Locale.lua
+Core.lua
+TextFit.lua
+Compat.lua
+Scan.lua
+Live.lua
+Chef.lua
+PriceSource.lua
+Disenchant.lua
+Profit.lua
+Plan.lua
+Ledger.lua
+Filters.lua
+Sort.lua
+UI.lua
+PlanPanel.lua
+Explorer.lua
+History.lua
+Session.lua
+Leveling.lua
+Hub.lua
+Sell.lua
+Shop.lua
+Commands.lua
