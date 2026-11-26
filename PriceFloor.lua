@@ -32,6 +32,8 @@ local function Recipes()
     return byOutput
 end
 
+function Floor.RecipeFor(itemID) return itemID and Recipes()[itemID] end
+
 -- { cost = per item, floor = lowest AH price that pays, why = "cost" | "merchant", recipe } or nil
 function Floor.For(itemID)
     local recipeID = itemID and Recipes()[itemID]

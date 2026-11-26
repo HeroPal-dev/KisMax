@@ -336,6 +336,11 @@ local RU = {
     ["tools and settings..."] = "инструменты и настройки...",
     -- v0.8: levelling plan
     ["Levelling plan"] = "План прокачки",
+    ["Sales"] = "Продажи",
+    ["Auction sales come from Naowh's The Market ledger (its mail records)."] =
+        "Продажи на аукционе берутся из Ledger Naowh (The Market, по почте).",
+    ["Auction sales (mail)"] = "Продажи на аукционе (почта)",
+    ["  Auction sales (mail): %s"] = "  Продажи на аукционе (почта): %s",
     ["cheap now"] = "сейчас дёшево",
     ["usually %s, %d%% less"] = "обычно %s, на %d%% дешевле",
     ["lots %s ago"] = "лоты %s назад",

@@ -9,7 +9,9 @@
 --                       selling), at the item's merchant price; what comes back that was not bought was bought
 --                       back. (The buyback list holds only 12 stacks, too few for a batch of crafts.)
 --   crafts              UNIT_SPELLCAST_SUCCEEDED of a recipe of the open profession
--- Not recorded: single (non-stackable) auction purchases, auction sales (mail), deposits, repairs.
+--   auction sales       from Naowh's The Market ledger (the money that came by mail for a sold auction), when The
+--                       Market is installed: its "auction" entries of items your recipes make, on their own day
+-- Not recorded: single (non-stackable) auction purchases, deposits, repairs.
 -- A recipe's real result: what its sold results brought minus its reagents' cost for those units,
 -- each reagent at the average price you actually paid (the market price when you bought none: "~").
 -- Days (db.ledgerDays, kept 60 days, not cleared by /km ledger reset): spent, merchant sales and crafts per
@@ -52,12 +54,12 @@ function Ledger.Days()
     return db.ledgerDays
 end
 
-local function Day()
+local function Day(at)
     local days = Ledger.Days()
-    local key = Ledger.DayKey()
+    local key = Ledger.DayKey(at)
     local day = days[key]
     if not day then
-        day = { ahSpent = 0, vendorSpent = 0, vendorEarned = 0, crafts = 0, recipes = {} }
+        day = { ahSpent = 0, vendorSpent = 0, vendorEarned = 0, ahEarned = 0, crafts = 0, recipes = {} }
         days[key] = day
         local oldest = Ledger.DayKey(time() - KEEP_DAYS * 86400)
         for k in pairs(days) do
@@ -152,24 +154,33 @@ local function Bought(itemID, qty, copper, where)
     Changed()
 end
 
-local function Sold(itemID, qty, copper)
+-- where: "ah" (an auction sold, money by mail) or merchant; at: when (a past auction sale goes on its own day)
+local function Sold(itemID, qty, copper, where, at)
     if not (itemID and qty and copper) then return end
     if not Ledger.IsCraftedGood(itemID) then
         NPP.Debug("ledger: not a crafted good, not counted: %s", itemID)
         return
     end
     local d = Ledger.Data()
-    local it = Item(itemID)
-    it.sold, it.earned = it.sold + qty, it.earned + copper
-    d.vendorEarned = d.vendorEarned + copper
-    local day = Day()
-    day.vendorEarned = day.vendorEarned + copper
-    for recipeID, r in pairs(d.recipes) do
-        if r.output == itemID then
-            local dr = DayRecipe(day, recipeID, r.name)
-            dr.earned = dr.earned + copper
-            break
-        end
+    local ah = where == "ah"
+    if not at or at >= (d.started or 0) then -- the period since /km ledger reset
+        local it = Item(itemID)
+        it.sold, it.earned = it.sold + qty, it.earned + copper
+        if ah then d.ahEarned = (d.ahEarned or 0) + copper else d.vendorEarned = d.vendorEarned + copper end
+    end
+    local day = Day(at)
+    if ah then day.ahEarned = (day.ahEarned or 0) + copper else day.vendorEarned = day.vendorEarned + copper end
+    local recipeID, name
+    for id, r in pairs(d.recipes) do
+        if r.output == itemID then recipeID, name = id, r.name break end
+    end
+    if not recipeID and NPP.PriceFloor and NPP.PriceFloor.RecipeFor then
+        recipeID = NPP.PriceFloor.RecipeFor(itemID)
+        name = recipeID and C_Spell.GetSpellName(recipeID)
+    end
+    if recipeID then
+        local dr = DayRecipe(day, recipeID, name)
+        dr.earned = dr.earned + copper
     end
     NPP.Debug("ledger: sold %d x %s for %s", qty, itemID, copper)
     Changed()
@@ -443,6 +454,37 @@ local function CleanOldCasts()
     if removed > 0 then NPP.Debug("ledger: removed %d non-recipe casts from the history", removed) end
 end
 
+-- Auction sales from Naowh's The Market ledger (per character: at, kind, item, qty, amount). Entries newer than the
+-- last one taken (per character) are taken once; the first time, everything still within the history's days.
+local function ImportAuctionSales()
+    local ns = NPP.ns
+    local shared = ns and ns.Shared
+    if not (shared and type(shared.CharacterData) == "function") then return end
+    local ok, data = pcall(shared.CharacterData, "marketLedger", false)
+    if not ok or type(data) ~= "table" or type(data.at) ~= "table" then return end
+    local guid = UnitGUID("player")
+    if not (guid and NPP.db) then return end
+    NPP.db.ledgerMarketSeen = type(NPP.db.ledgerMarketSeen) == "table" and NPP.db.ledgerMarketSeen or {}
+    local last = NPP.db.ledgerMarketSeen[guid] or (time() - KEEP_DAYS * 86400)
+    local newest, taken = last, 0
+    for i = 1, #data.at do
+        local at = data.at[i]
+        if type(at) == "number" and at > last and data.kind[i] == "auction" and (tonumber(data.amount[i]) or 0) > 0 then
+            local item = data.item[i]
+            local itemID = type(item) == "number" and item > 0 and item
+                or (type(item) == "string" and C_Item.GetItemInfoInstant and C_Item.GetItemInfoInstant(item)) or nil
+            if itemID then
+                Sold(itemID, tonumber(data.qty[i]) or 1, tonumber(data.amount[i]), "ah", at)
+                taken = taken + 1
+            end
+        end
+        if type(at) == "number" and at > newest then newest = at end
+    end
+    NPP.db.ledgerMarketSeen[guid] = newest
+    if taken > 0 then NPP.Debug("ledger: %d auction sales taken from The Market", taken) end
+end
+Ledger.ImportAuctionSales = ImportAuctionSales
+
 function Ledger.ResetDays()
     if NPP.db then NPP.db.ledgerDays = nil end
 end
@@ -450,6 +492,19 @@ end
 NPP.Module("ledger", { "core" }, function()
     Ledger.Data()
     NPP.Safe("ledger clean", CleanOldCasts)
+    -- auction sales: a moment after logging in, and after mail (where their money comes)
+    C_Timer.After(5, function() NPP.Safe("ledger auction sales", ImportAuctionSales) end)
+    local mail = CreateFrame("Frame")
+    local waiting = false
+    for _, e in ipairs({ "MAIL_CLOSED", "MAIL_INBOX_UPDATE", "PLAYER_MONEY" }) do pcall(mail.RegisterEvent, mail, e) end
+    mail:SetScript("OnEvent", function()
+        if waiting then return end
+        waiting = true
+        C_Timer.After(3, function()
+            waiting = false
+            NPP.Safe("ledger auction sales", ImportAuctionSales)
+        end)
+    end)
     -- no hooks on protected functions (auction purchases, using bag items): events only
     if BuyMerchantItem then
         hooksecurefunc("BuyMerchantItem", function(...) NPP.Safe("ledger buy", OnBuyMerchant, ...) end)

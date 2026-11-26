@@ -134,7 +134,8 @@ local function LedgerReport()
     local Ledger = NPP.Ledger
     local d = Ledger.Data()
     NPP.Print(L("Ledger since %s (%s ago):"), date("%d.%m %H:%M", d.started), NPP.PriceSource.Age(d.started))
-    local net = d.vendorEarned - d.ahSpent - d.vendorSpent
+    local net = d.vendorEarned + (d.ahEarned or 0) - d.ahSpent - d.vendorSpent
+    if (d.ahEarned or 0) > 0 then NPP.Print(L("  Auction sales (mail): %s"), NPP.Coins(d.ahEarned)) end
     NPP.Print(L("  Spent: auction %s, merchant %s. Merchants paid %s. Money: %s"), NPP.Coins(d.ahSpent),
         NPP.Coins(d.vendorSpent), NPP.Coins(d.vendorEarned), (net >= 0 and "|cff4dd17a" or "|cffff5555") .. NPP.Coins(net) .. "|r")
     local rows = {}

@@ -11,7 +11,7 @@ local ROWS, ROW_H = 14, 20
 local COLS = {
     { title = "Day", w = 90, align = "LEFT" },
     { title = "Spent", w = 95, align = "RIGHT" },
-    { title = "Merchants paid", w = 110, align = "RIGHT" },
+    { title = "Sales", w = 110, align = "RIGHT" },
     { title = "Result", w = 95, align = "RIGHT" },
     { title = "Crafts", w = 60, align = "RIGHT" },
     { title = "Best recipe", w = 200, align = "LEFT", max = 300 },
@@ -41,7 +41,8 @@ local function Button(parent, text, w, h, onClick)
     return b
 end
 
-local function Net(day) return (day.vendorEarned or 0) - (day.ahSpent or 0) - (day.vendorSpent or 0) end
+local function Earned(day) return (day.vendorEarned or 0) + (day.ahEarned or 0) end
+local function Net(day) return Earned(day) - (day.ahSpent or 0) - (day.vendorSpent or 0) end
 
 local function Colored(copper)
     return (copper >= 0 and GREEN or RED) .. NPP.Coins(copper) .. "|r"
@@ -77,7 +78,7 @@ local function Sum(keys, days, n)
         if k >= since then
             local d = days[k]
             s.spent = s.spent + (d.ahSpent or 0) + (d.vendorSpent or 0)
-            s.earned = s.earned + (d.vendorEarned or 0)
+            s.earned = s.earned + Earned(d)
             s.crafts = s.crafts + (d.crafts or 0)
         end
     end
@@ -96,7 +97,7 @@ function History.Render()
             local c = row.cells
             c[1]:SetText(Pretty(key))
             c[2]:SetText(NPP.Coins((d.ahSpent or 0) + (d.vendorSpent or 0)))
-            c[3]:SetText(NPP.Coins(d.vendorEarned or 0))
+            c[3]:SetText(NPP.Coins(Earned(d)))
             c[4]:SetText(Colored(Net(d)))
             c[5]:SetText(tostring(d.crafts or 0))
             local name, earned = Best(d)
@@ -118,7 +119,7 @@ function History.Render()
         NPP.Coins(w.earned), Colored(w.earned - w.spent), w.crafts) .. "\n"
         .. L("30 days: spent %s, merchants paid %s, result %s, crafts %d"):format(NPP.Coins(m.spent),
         NPP.Coins(m.earned), Colored(m.earned - m.spent), m.crafts) .. "\n"
-        .. GREY .. L("Auction sales (by mail) are not counted yet.") .. "|r")
+        .. GREY .. L("Auction sales come from Naowh's The Market ledger (its mail records).") .. "|r")
     frame:SetWidth(PAD * 2 + NPP.LayoutColumns(COLS, heads, rows, PAD, -44))
 end
 
@@ -129,6 +130,7 @@ local function DayTooltip(self)
     GameTooltip:AddDoubleLine(L("Auction house"), NPP.Coins(d.ahSpent or 0), 1, 1, 1, 1, 1, 1)
     GameTooltip:AddDoubleLine(L("Merchants (bought)"), NPP.Coins(d.vendorSpent or 0), 1, 1, 1, 1, 1, 1)
     GameTooltip:AddDoubleLine(L("Merchants paid"), NPP.Coins(d.vendorEarned or 0), 1, 1, 1, 1, 1, 1)
+    GameTooltip:AddDoubleLine(L("Auction sales (mail)"), NPP.Coins(d.ahEarned or 0), 1, 1, 1, 1, 1, 1)
     local list = {}
     for _, r in pairs(d.recipes or {}) do list[#list + 1] = r end
     table.sort(list, function(a, b) return (a.earned or 0) > (b.earned or 0) end)
