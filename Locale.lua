@@ -337,6 +337,9 @@ local RU = {
     -- v0.8: levelling plan
     ["Levelling plan"] = "План прокачки",
     ["Sales"] = "Продажи",
+    ["7 days: spent %s, sales %s, result %s, crafts %d"] = "7 дней: потрачено %s, продажи %s, итог %s, крафтов %d",
+    ["30 days: spent %s, sales %s, result %s, crafts %d"] = "30 дней: потрачено %s, продажи %s, итог %s, крафтов %d",
+    ["per hour of crafting: %s (%s of crafting)"] = "в час крафта: %s (крафт занял %s)",
     ["Auction sales come from Naowh's The Market ledger (its mail records)."] =
         "Продажи на аукционе берутся из Ledger Naowh (The Market, по почте).",
     ["Auction sales (mail)"] = "Продажи на аукционе (почта)",

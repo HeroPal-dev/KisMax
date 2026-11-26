@@ -388,6 +388,8 @@ local function OnCast(spellID)
     lastCraft = GetTime()
     local day = Day()
     day.crafts = day.crafts + 1
+    -- crafting time: the cast and the gap between repeated casts, as Naowh's craft timer counts it
+    day.secs = (day.secs or 0) + ((NPP.Profit and NPP.Profit.CraftSeconds) and NPP.Profit.CraftSeconds(spellID) or 3.3)
     local dr = DayRecipe(day, spellID, r.name)
     dr.crafts = dr.crafts + 1
     if not r.output then

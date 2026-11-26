@@ -13,6 +13,7 @@ local COLS = {
     { title = "Spent", w = 95, align = "RIGHT" },
     { title = "Sales", w = 110, align = "RIGHT" },
     { title = "Result", w = 95, align = "RIGHT" },
+    { title = "Per hour", w = 95, align = "RIGHT" },
     { title = "Crafts", w = 60, align = "RIGHT" },
     { title = "Best recipe", w = 200, align = "LEFT", max = 300 },
 }
@@ -73,13 +74,14 @@ end
 
 local function Sum(keys, days, n)
     local since = NPP.Ledger.DayKey(time() - (n - 1) * 86400)
-    local s = { spent = 0, earned = 0, crafts = 0 }
+    local s = { spent = 0, earned = 0, crafts = 0, secs = 0 }
     for _, k in ipairs(keys) do
         if k >= since then
             local d = days[k]
             s.spent = s.spent + (d.ahSpent or 0) + (d.vendorSpent or 0)
             s.earned = s.earned + Earned(d)
             s.crafts = s.crafts + (d.crafts or 0)
+            s.secs = s.secs + (d.secs or 0)
         end
     end
     return s
@@ -99,9 +101,12 @@ function History.Render()
             c[2]:SetText(NPP.Coins((d.ahSpent or 0) + (d.vendorSpent or 0)))
             c[3]:SetText(NPP.Coins(Earned(d)))
             c[4]:SetText(Colored(Net(d)))
-            c[5]:SetText(tostring(d.crafts or 0))
+            -- the day's result per hour of crafting (only days whose crafting time was recorded)
+            local secs = d.secs or 0
+            c[5]:SetText(secs >= 60 and Colored(math.floor(Net(d) * 3600 / secs)) or (GREY .. "-|r"))
+            c[6]:SetText(tostring(d.crafts or 0))
             local name, earned = Best(d)
-            c[6]:SetText(name and (name .. GREY .. " (" .. NPP.Coins(earned) .. ")|r") or (GREY .. "-|r"))
+            c[7]:SetText(name and (name .. GREY .. " (" .. NPP.Coins(earned) .. ")|r") or (GREY .. "-|r"))
             row.day = d
             row:Show()
         else
@@ -115,10 +120,15 @@ function History.Render()
         rows[1]:Show()
     end
     local w, m = Sum(keys, days, 7), Sum(keys, days, 30)
-    totals:SetText(L("7 days: spent %s, merchants paid %s, result %s, crafts %d"):format(NPP.Coins(w.spent),
-        NPP.Coins(w.earned), Colored(w.earned - w.spent), w.crafts) .. "\n"
-        .. L("30 days: spent %s, merchants paid %s, result %s, crafts %d"):format(NPP.Coins(m.spent),
-        NPP.Coins(m.earned), Colored(m.earned - m.spent), m.crafts) .. "\n"
+    local function PerHour(s)
+        if s.secs < 60 then return "" end
+        return "\n    " .. L("per hour of crafting: %s (%s of crafting)"):format(Colored(math.floor((s.earned - s.spent) * 3600 / s.secs)),
+            NPP.Plan.TimeText(s.secs))
+    end
+    totals:SetText(L("7 days: spent %s, sales %s, result %s, crafts %d"):format(NPP.Coins(w.spent),
+        NPP.Coins(w.earned), Colored(w.earned - w.spent), w.crafts) .. PerHour(w) .. "\n"
+        .. L("30 days: spent %s, sales %s, result %s, crafts %d"):format(NPP.Coins(m.spent),
+        NPP.Coins(m.earned), Colored(m.earned - m.spent), m.crafts) .. PerHour(m) .. "\n"
         .. GREY .. L("Auction sales come from Naowh's The Market ledger (its mail records).") .. "|r")
     frame:SetWidth(PAD * 2 + NPP.LayoutColumns(COLS, heads, rows, PAD, -44))
 end
@@ -146,7 +156,7 @@ end
 
 local function Build()
     frame = CreateFrame("Frame", "KisMaxHistory", UIParent)
-    frame:SetSize(WIDTH, 60 + 22 + ROWS * ROW_H + 64)
+    frame:SetSize(WIDTH, 60 + 22 + ROWS * ROW_H + 100)
     frame:SetPoint("CENTER")
     frame:SetFrameStrata("HIGH")
     frame:SetMovable(true)
