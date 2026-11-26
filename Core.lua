@@ -50,6 +50,8 @@ NPP.DEFAULTS = {
     tooltipDE = true,       -- "KM disenchant" line on item tooltips
     levelAH = "off",        -- levelling plan: count auction sales "off" | "demand" (up to TSM sold per day)
     levelTarget = false,
+    levelChar = false,      -- levelling plan for another character of yours (GUID); false = this one
+    levelFrom = false,      -- levelling plan start skill typed by hand; false = the character's skill
     levelProf = false,      -- levelling plan profession (skill line id); false = the open one or your first
     levelVendor = true,     -- levelling plan: sell results to merchants
     levelDE = true,         -- levelling plan: disenchant results (if your Enchanting can)
@@ -146,7 +148,7 @@ end
 
 function NPP.ResetSettings()
     local kept = {} -- records, not settings: kept
-    for _, k in ipairs({ "sellList", "ledger", "ledgerDays", "shop", "shopPos" }) do kept[k] = NPP.db[k] end
+    for _, k in ipairs({ "sellList", "ledger", "ledgerDays", "ledgerMarketSeen", "shop", "shopPos", "chars" }) do kept[k] = NPP.db[k] end
     for k in pairs(NPP.db) do NPP.db[k] = nil end
     for k, v in pairs(NPP.DEFAULTS) do NPP.db[k] = v end
     for k, v in pairs(kept) do NPP.db[k] = v end

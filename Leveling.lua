@@ -45,7 +45,53 @@ local result
 -- Data
 ---------------------------------------------------------------------------------------------------
 
-local function MyFaction() return UnitFactionGroup("player") == "Horde" and "H" or "A" end
+local planFaction -- the faction of the character being planned (an alt's), nil = yours
+local planAlt      -- the alt being planned ({ name, faction, ... } from Chars()), nil = you
+
+local function MyFaction()
+    return (planFaction or UnitFactionGroup("player")) == "Horde" and "H" or "A"
+end
+
+-- Your characters' professions, saved by each one when it logs in (account-wide):
+-- db.chars[guid] = { name, class, realm, faction, at, profs = { [skill line] = { skill, cap, name } } }
+local function Chars()
+    if not NPP.db then return {} end
+    if type(NPP.db.chars) ~= "table" then NPP.db.chars = {} end
+    return NPP.db.chars
+end
+
+local function SaveMe()
+    local guid = UnitGUID("player")
+    if not (guid and GetProfessions) then return end
+    local me = Chars()[guid] or {}
+    Chars()[guid] = me
+    me.name, me.class = UnitName("player"), select(2, UnitClass("player"))
+    me.realm, me.faction, me.at = GetRealmName(), UnitFactionGroup("player"), time()
+    me.profs = {}
+    for _, index in pairs({ GetProfessions() }) do
+        local name, _, skill, cap, _, _, line = GetProfessionInfo(index)
+        if line then me.profs[line] = { skill = skill or 0, cap = cap or 0, name = name } end
+    end
+end
+-- Other characters of yours on this realm with a profession that has recipes: { { guid, char, id, name, skill, cap } }
+local function AltProfessions()
+    local list, me, realm = {}, UnitGUID("player"), GetRealmName()
+    for guid, ch in pairs(Chars()) do
+        if guid ~= me and type(ch) == "table" and ch.realm == realm and type(ch.profs) == "table" then
+            for line, p in pairs(ch.profs) do
+                local d = NPP.ns and type(NPP.ns.RecipeData) == "table" and NPP.ns.RecipeData[line]
+                if d and type(d.recipes) == "table" and #d.recipes > 0 then
+                    list[#list + 1] = { guid = guid, char = ch, id = line, name = p.name, skill = p.skill, cap = p.cap }
+                end
+            end
+        end
+    end
+    table.sort(list, function(a, b)
+        if a.char.name ~= b.char.name then return (a.char.name or "") < (b.char.name or "") end
+        return (a.name or "") < (b.name or "")
+    end)
+    return list
+end
 
 local function Mine(side)
     return type(side) ~= "string" or side:find(MyFaction(), 1, true) ~= nil
@@ -98,6 +144,16 @@ end
 -- The profession to plan: id, skill, cap, name, known (you have it)
 local function Profession()
     local want = NPP.Get("levelProf")
+    local altGUID = NPP.Get("levelChar")
+    planFaction, planAlt = nil, nil
+    if want and altGUID and altGUID ~= UnitGUID("player") then
+        local ch = Chars()[altGUID]
+        local p = type(ch) == "table" and type(ch.profs) == "table" and ch.profs[want]
+        if p then
+            planFaction, planAlt = ch.faction, ch
+            return want, p.skill or 1, p.cap or 75, p.name or ProfName(want), true, altGUID
+        end
+    end
     local mine = MyProfessions()
     if not want then want = OpenProfession() or (mine[1] and mine[1].id) end
     if not want then return end
@@ -109,11 +165,20 @@ end
 
 -- Recipes of a profession you have learned: the open window knows; otherwise what Naowh remembers.
 local function LearnedSet(profID)
-    if OpenProfession() == profID then return nil end -- ask the window per recipe
     local set = {}
-    local S = NPP.P and NPP.P.Shopping
     local ok, makes = false, nil
-    if S and type(S.Makes) == "function" then ok, makes = pcall(S.Makes) end
+    if planAlt then
+        -- Naowh remembers each character's learned recipes (profMakes, by GUID)
+        local ns = NPP.ns
+        local all = ns and type(ns.AccountSettings) == "function" and ns.AccountSettings().profMakes
+        local guid = NPP.Get("levelChar")
+        makes = type(all) == "table" and all[guid]
+        ok = type(makes) == "table"
+    else
+        if OpenProfession() == profID then return nil end -- ask the window per recipe
+        local S = NPP.P and NPP.P.Shopping
+        if S and type(S.Makes) == "function" then ok, makes = pcall(S.Makes) end
+    end
     for _, m in pairs(ok and type(makes) == "table" and makes or {}) do
         if type(m) == "table" and m.prof == profID and m.recipe then set[m.recipe] = true end
     end
@@ -276,8 +341,8 @@ local function EnchantInfo(spell)
     local P = NPP.P
     local slot = P and type(P.EnchantSlots) == "table" and P.EnchantSlots[spell]
     if type(slot) ~= "table" then return nil end
-    local have = false
-    for _, g in ipairs(Gear()) do
+    local have = planAlt ~= nil -- an alt's gear is not known here
+    for _, g in ipairs(planAlt and {} or Gear()) do
         if Fits(slot, g[1], g[2], g[3]) then have = true break end
     end
     return { slot = slot, name = Leveling.SlotName(slot), have = have }
@@ -513,18 +578,27 @@ local function Beats(a, b)
 end
 
 function Leveling.Count()
-    local profID, skill, cap, profName, known = Profession()
+    local profID, skill, cap, profName, known, altGUID = Profession()
     if not profID then
         result = nil
         return Leveling.Open(true)
+    end
+    local realSkill = skill
+    local from = tonumber(NPP.Get("levelFrom"))
+    if from and from >= 1 then
+        -- typed by hand: the rank that skill needs counts as had (cap at least the skill)
+        skill = math.floor(from)
+        cap = math.max(cap, skill)
     end
     local top = 300
     for _, rk in ipairs(RecipeData()[profID].ranks or {}) do top = math.max(top, rk.cap or 0) end
     local target = tonumber(NPP.Get("levelTarget"))
     if not target or target <= skill then target = cap > skill and cap or math.min(top, cap + 75) end
     target = math.min(target, top)
+    local who = planAlt and planAlt.name or nil
     if target <= skill then
-        result = { profID = profID, profName = profName, skill = skill, target = target, segments = {}, done = true, toLearn = {} }
+        result = { profID = profID, profName = profName, skill = skill, target = target, segments = {}, done = true, toLearn = {},
+            who = who, alt = altGUID, typedFrom = skill ~= realSkill, realSkill = realSkill }
         return Leveling.Open(true)
     end
     local meta = { known = known, profName = profName }
@@ -548,6 +622,7 @@ function Leveling.Count()
         end
     end
     best.runs = runs
+    best.who, best.alt, best.typedFrom, best.realSkill = who, altGUID, skill ~= realSkill, realSkill
     result = best
     NPP.Debug("leveling: %d -> %d, %d segments, %d recipes counted, %d routes tried", skill, target, #best.segments,
         #best.cands, runs)
@@ -587,6 +662,9 @@ end
 
 function Leveling.ToQueue()
     if not (result and result.cands) then return end
+    if result.alt then
+        return NPP.Print(L("This is %s's plan: queue the crafts on that character (buy here and send by mail)."), result.who or "?")
+    end
     if OpenProfession() ~= result.profID then
         return NPP.Print(L("Open this profession's window first: the crafting queue crafts there."))
     end
@@ -758,8 +836,25 @@ local function Build()
 
     -- switches: target and where results go
     buttons = {}
+    buttons.from = Button(frame, "", 80, 22, function() Leveling.EditFrom() end)
+    buttons.from:SetPoint("TOPLEFT", PAD, -94)
+    buttons.from:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    buttons.from:SetScript("OnClick", function(_, mouse)
+        if mouse == "RightButton" then
+            NPP.Set("levelFrom", false, true)
+            return NPP.Safe("leveling", Leveling.Count)
+        end
+        Leveling.EditFrom()
+    end)
+    buttons.from:HookScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine(L("Click: type the skill to start from"), 0.8, 0.8, 0.8)
+        GameTooltip:AddLine(L("Right-click: the character's real skill"), 0.8, 0.8, 0.8)
+        GameTooltip:Show()
+    end)
+    buttons.from:HookScript("OnLeave", GameTooltip_Hide)
     buttons.minus = Button(frame, "-5", 34, 22, function() Leveling.Step(-5) end)
-    buttons.minus:SetPoint("TOPLEFT", PAD, -94)
+    buttons.minus:SetPoint("LEFT", buttons.from, "RIGHT", 8, 0)
     buttons.target = Button(frame, "", 100, 22, function() Leveling.EditTarget() end)
     buttons.target:SetPoint("LEFT", buttons.minus, "RIGHT", 4, 0)
     buttons.target:HookScript("OnEnter", function(self)
@@ -780,7 +875,7 @@ local function Build()
         local v = tonumber(self:GetText())
         self:Hide()
         if v and v > 0 then
-            NPP.Set("levelTarget", v, true)
+            NPP.Set(self.key or "levelTarget", v, true)
             NPP.Safe("leveling", Leveling.Count)
         end
     end)
@@ -890,7 +985,8 @@ end
 function Leveling.Render()
     if not (frame and frame:IsShown()) then return end
     local r = result
-    frame.title:SetText(GOLD .. L("Levelling plan") .. "|r" .. (r and r.profName and (" - " .. r.profName) or ""))
+    frame.title:SetText(GOLD .. L("Levelling plan") .. "|r" .. (r and r.profName and (" - " .. r.profName) or "")
+        .. (r and r.who and (" |cff33ccff(" .. r.who .. ")|r") or ""))
     local segs = r and r.segments or {}
     for i, row in ipairs(rows) do
         local seg = segs[i]
@@ -935,7 +1031,15 @@ function Leveling.Render()
         end
         if #segs > ROWS then text = text .. "\n" .. GREY .. L("(%d more steps not shown)"):format(#segs - ROWS) .. "|r" end
         if r.p and r.p.noDepth then text = text .. "\n" .. RED .. L("Some reagents have no quantities: their price counts as unlimited.") .. "|r" end
-        if r.learnedFromMemory then
+        if r.alt then
+            text = text .. "\n" .. GREY .. L("%s's profession as saved when that character last logged in; learned recipes as Naowh remembers them. Buy here, send by mail.")
+                :format(r.who or "?") .. "|r"
+        end
+        if r.typedFrom then
+            text = text .. "\n" .. GREY .. L("Start typed by hand: %d (the real skill is %d).")
+                :format(r.skill or 0, r.realSkill or 0) .. "|r"
+        end
+        if r.learnedFromMemory and not r.alt then
             text = text .. "\n" .. GREY .. (r.known and L("Learned recipes as Naowh remembers them (open the profession once to update).")
                 or L("You do not have this profession: every recipe counts as not learned.")) .. "|r"
         end
@@ -986,21 +1090,35 @@ function Leveling.Render()
     local tabsRight = RenderTabs()
     local width = NPP.LayoutColumns(COLS, heads, rows, PAD, -TOP)
     SetLabel(buttons.target, L("Target: %d"):format(r and r.target or tonumber(NPP.Get("levelTarget")) or 0))
+    SetLabel(buttons.from, (r and r.typedFrom and GOLD or "") .. L("From: %d"):format(r and r.skill or 0) .. (r and r.typedFrom and "|r" or ""))
     SetLabel(buttons.vendor, OnOff("levelVendor", "Merchant / disenchant"))
     SetLabel(buttons.ah, L("AH") .. ": " .. (NPP.Get("levelAH") == "demand" and (GREEN .. L("by demand") .. "|r") or (GREY .. L("no") .. "|r")))
     SetLabel(buttons.recipesAH, OnOff("levelRecipesAH", "Recipes from the AH"))
     for _, b in pairs(buttons) do NPP.FitButton(b, 34) end
     local switches = 0
-    for _, k in ipairs({ "minus", "target", "plus", "vendor", "ah", "recipesAH" }) do switches = switches + buttons[k]:GetWidth() + 4 end
+    for _, k in ipairs({ "from", "minus", "target", "plus", "vendor", "ah", "recipesAH" }) do switches = switches + buttons[k]:GetWidth() + 4 end
     frame:SetWidth(math.max(PAD * 2 + width, PAD * 2 + switches + 10, tabsRight + PAD + 30, 640))
     local has = r and r.segments and #r.segments > 0
     SetEnabled(buttons.shop, has and true or false)
     SetEnabled(buttons.queue, has and true or false)
 end
 
+function Leveling.EditFrom()
+    local box = frame and frame.targetBox
+    if not box then return end
+    box.key = "levelFrom"
+    box:ClearAllPoints()
+    box:SetPoint("CENTER", buttons.from, "CENTER", 2, 0)
+    box:SetText(tostring((result and result.skill) or ""))
+    box:Show()
+    box:SetFocus()
+    box:HighlightText()
+end
+
 function Leveling.EditTarget()
     local box = frame and frame.targetBox
     if not box then return end
+    box.key = "levelTarget"
     box:ClearAllPoints()
     box:SetPoint("CENTER", buttons.target, "CENTER", 2, 0)
     box:SetText(tostring((result and result.target) or tonumber(NPP.Get("levelTarget")) or ""))
@@ -1015,27 +1133,50 @@ function Leveling.Step(by)
     local top = 300
     for _, rk in ipairs(RecipeData()[profID].ranks or {}) do top = math.max(top, rk.cap or 0) end
     local current = (result and result.target) or tonumber(NPP.Get("levelTarget")) or cap or 0
-    local t = math.max((skill or 0) + 1, math.min(top, current + by))
+    local start = (result and result.skill) or skill or 0
+    local t = math.max(start + 1, math.min(top, current + by))
     NPP.Set("levelTarget", t, true)
     NPP.Safe("leveling", Leveling.Count)
 end
 
 -- Tabs: your professions, then "Other" (each click: the next profession you do not have).
-function Leveling.Choose(id)
+function Leveling.Choose(id, altGUID)
     NPP.Set("levelProf", id, true)
+    NPP.Set("levelChar", altGUID or false, true)
     NPP.Set("levelTarget", false, true)
+    NPP.Set("levelFrom", false, true)
     NPP.Safe("leveling", Leveling.Count)
 end
 
-local function ChooseOther()
-    local others = OtherProfessions()
-    if #others == 0 then return end
-    local current = NPP.Get("levelProf")
-    local nextIndex = 1
-    for i, p in ipairs(others) do
-        if p.id == current then nextIndex = i % #others + 1 end
+local function ChooseOther(owner)
+    local others, alts = OtherProfessions(), AltProfessions()
+    if not (MenuUtil and MenuUtil.CreateContextMenu) then
+        -- no menus: each click the next profession you do not have
+        if #others == 0 then return end
+        local current, nextIndex = NPP.Get("levelProf"), 1
+        for i, p in ipairs(others) do
+            if p.id == current then nextIndex = i % #others + 1 end
+        end
+        return Leveling.Choose(others[nextIndex].id)
     end
-    Leveling.Choose(others[nextIndex].id)
+    MenuUtil.CreateContextMenu(owner, function(_, root)
+        root:CreateTitle(L("Your other characters"))
+        if #alts == 0 then
+            root:CreateButton(GREY .. L("(log in with each character once to see it here)") .. "|r", function() end)
+        end
+        for _, a in ipairs(alts) do
+            local color = a.char.class and C_ClassColor and C_ClassColor.GetClassColor(a.char.class)
+            local who = color and color:WrapTextInColorCode(a.char.name or "?") or (a.char.name or "?")
+            root:CreateButton(("%s: %s %d/%d"):format(who, a.name or ProfName(a.id), a.skill or 0, a.cap or 0), function()
+                Leveling.Choose(a.id, a.guid)
+            end)
+        end
+        root:CreateDivider()
+        root:CreateTitle(L("Professions you do not have"))
+        for _, p in ipairs(others) do
+            root:CreateButton(p.name, function() Leveling.Choose(p.id) end)
+        end
+    end)
 end
 
 function RenderTabs()
@@ -1046,9 +1187,15 @@ function RenderTabs()
     for _, p in ipairs(mine) do
         entries[#entries + 1] = { text = ("%s %d/%d"):format(p.name, p.skill, p.cap), id = p.id, on = p.id == chosen }
     end
-    local otherOn = chosen and result and not result.known
-    entries[#entries + 1] = { text = otherOn and (L("Other: %s"):format(result.profName)) or L("Other profession..."),
-        other = true, on = otherOn }
+    if result and result.alt then
+        for _, e in ipairs(entries) do e.on = false end
+    end
+    local otherOn = chosen and result and (not result.known or result.alt)
+    local otherText = L("Other profession...")
+    if otherOn then
+        otherText = result.alt and ("%s: %s"):format(result.who or "?", result.profName) or L("Other: %s"):format(result.profName)
+    end
+    entries[#entries + 1] = { text = otherText, other = true, on = otherOn }
     for i, e in ipairs(entries) do
         local b = tabs[i]
         if not b then
@@ -1057,7 +1204,7 @@ function RenderTabs()
         end
         b.entry = e
         b:SetScript("OnClick", function(self)
-            if self.entry.other then ChooseOther() else Leveling.Choose(self.entry.id) end
+            if self.entry.other then ChooseOther(self) else Leveling.Choose(self.entry.id) end
         end)
         SetLabel(b, e.on and (GOLD .. e.text .. "|r") or e.text)
         NPP.FitButton(b, 90)
@@ -1083,4 +1230,18 @@ function Leveling.Toggle()
     Leveling.Open()
 end
 
-NPP.Module("leveling", { "core", "ui" }, function() end)
+NPP.Module("leveling", { "core", "ui" }, function()
+    -- remember this character's professions for planning from your other characters
+    C_Timer.After(3, function() NPP.Safe("leveling save", SaveMe) end)
+    local watch, waiting = CreateFrame("Frame"), false
+    for _, e in ipairs({ "SKILL_LINES_CHANGED", "TRADE_SKILL_LIST_UPDATE", "PLAYER_LOGOUT" }) do pcall(watch.RegisterEvent, watch, e) end
+    watch:SetScript("OnEvent", function(_, event)
+        if event == "PLAYER_LOGOUT" then return NPP.Safe("leveling save", SaveMe) end
+        if waiting then return end
+        waiting = true
+        C_Timer.After(2, function()
+            waiting = false
+            NPP.Safe("leveling save", SaveMe)
+        end)
+    end)
+end)

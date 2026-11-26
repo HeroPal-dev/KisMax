@@ -441,6 +441,17 @@ local RU = {
         "Ожидаемые значения: крафт даёт очко с шансом своего цвета. Реагенты сначала из сумок, потом самые дешёвые лоты. Рецепты с перезарядкой (трансмутации) не берутся.",
     ["Where to learn:"] = "Где изучить:",
     ["gear"] = "вещь",
+    ["From: %d"] = "От: %d",
+    ["Click: type the skill to start from"] = "Клик: ввести навык, с которого начать",
+    ["Right-click: the character's real skill"] = "Правый клик: настоящий навык персонажа",
+    ["Your other characters"] = "Другие персонажи",
+    ["(log in with each character once to see it here)"] = "(зайди каждым персонажем один раз, чтобы он тут появился)",
+    ["Professions you do not have"] = "Профессии, которых у тебя нет",
+    ["This is %s's plan: queue the crafts on that character (buy here and send by mail)."] =
+        "Это план для %s: очередь крафта ставь на том персонаже (здесь купи и отправь почтой).",
+    ["%s's profession as saved when that character last logged in; learned recipes as Naowh remembers them. Buy here, send by mail."] =
+        "Профессия %s — как запомнилась при последнем входе этим персонажем; изученные рецепты — как их помнит Naowh. Купи здесь, отправь почтой.",
+    ["Start typed by hand: %d (the real skill is %d)."] = "Начало введено вручную: %d (настоящий навык %d).",
     ["Enchants are cast by hand on your own gear (the item slot under the recipe, then Create): %s."] =
         "Чары накладывай сам на свою вещь (слот вещи под рецептом, затем «Создать»): %s.",
     ["Enchants go on your own gear: you pay only the reagents, nothing comes back."] =
