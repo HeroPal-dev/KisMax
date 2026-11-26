@@ -442,6 +442,15 @@ local RU = {
     ["Where to learn:"] = "Где изучить:",
     ["gear"] = "вещь",
     ["From: %d"] = "От: %d",
+    ["To shopping list (%d)"] = "В список покупок (%d)",
+    ["To craft queue (%d)"] = "В очередь крафта (%d)",
+    ["Tick the steps to buy for: click a row (Shift-click: every step up to it)."] =
+        "Отметь шаги, под которые купить: клик по строке (Shift+клик — все шаги до неё).",
+    ["Shopping list: %d crafts, steps %d-%d."] = "В список покупок: %d крафтов, навык %d-%d.",
+    ["%d crafts had no reagents left on the market."] = "На %d крафтов реагентов на рынке не хватило.",
+    ["Nothing to buy: your bags have it all."] = "Покупать нечего: всё уже есть в сумках.",
+    ["Click a step to tick it for the shopping list and the queue; Shift-click: every step up to it."] =
+        "Клик по шагу — отметить его для списка покупок и очереди; Shift+клик — все шаги до него.",
     ["%s's skill is a guess from the recipes learned (about %d): log in with %s once, or type it with \"From\"."] =
         "Навык %s угадан по изученным рецептам (примерно %d): зайди %s один раз или введи его в «От».",
     ["Click: type the skill to start from"] = "Клик: ввести навык, с которого начать",

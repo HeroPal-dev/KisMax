@@ -35,6 +35,8 @@ local COLS = {
 local PAD = 12
 local TOP = 120
 local GREEN, RED, GREY, GOLD = "|cff4dd17a", "|cffff5555", "|cff999999", "|cffffd100"
+local BOX_ON = "|TInterface\\Buttons\\UI-CheckBox-Check:14:14:0:0|t"
+local BOX_OFF = "|TInterface\\Buttons\\UI-CheckBox-Up:14:14:0:0|t"
 
 local frame, rows, heads, info, total, buttons, learnLines
 local tabs = {}
@@ -321,7 +323,7 @@ local function RankSteps(profID, cap, target)
                 end
             end
             out[#out + 1] = { name = rank.name or L("Rank up to %d"):format(rank.cap), learnCost = cost, sources = sources,
-                rank = true, quest = rank.quest ~= nil, skill = rank.skill, level = rank.level }
+                rank = true, quest = rank.quest ~= nil, skill = rank.skill, level = rank.level, rankFrom = prev }
             prev = rank.cap
         end
     end
@@ -725,24 +727,90 @@ end
 
 -- To the shopping list: what the route takes from the AH and merchants (the supply's own breakdown, with the
 -- dearest unit price it reached as the limit). Recipes to buy are printed.
+-- The steps ticked in the list (row clicks), in order: { seg, ... }
+local function Picked()
+    local list = {}
+    if not (result and result.segments and result.picked) then return list end
+    for i, seg in ipairs(result.segments) do
+        if result.picked[i] then list[#list + 1] = seg end
+    end
+    return list
+end
+Leveling.Picked = Picked
+
+-- To the shopping list: the reagents of the ticked steps only. They are counted again on a fresh supply (your
+-- bags first, then the cheapest lots), so a few steps now take the cheapest lots, not the whole route's share.
 function Leveling.ToShopping()
-    if not (result and result.state and #result.segments > 0) then return end
+    if not (result and result.segments and #result.segments > 0) then return end
+    local picked = Picked()
+    if #picked == 0 then
+        return NPP.Print(L("Tick the steps to buy for: click a row (Shift-click: every step up to it)."))
+    end
     local P = I()
+    local p = {}
+    local state, Get = P.NewState(p)
+    local seen = {}
+    for _, seg in ipairs(picked) do
+        local c = seg.c
+        if not seen[c] then
+            seen[c] = true
+            for _, part in ipairs(c.v.parts) do
+                if not part.owned then
+                    local st = Get(part.itemID)
+                    if part.maker then
+                        st.made = part.maker.made
+                        for _, sub in ipairs(part.maker.parts) do
+                            if not sub.owned then Get(sub.itemID) end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    local crafts, short = 0, 0
+    for _, seg in ipairs(picked) do
+        for _ = 1, seg.crafts do
+            if TakeOne(seg.c, Get) then crafts = crafts + 1 else short = short + 1 end
+        end
+    end
     local parts = {}
-    for id, s in pairs(result.state) do
+    for id, s in pairs(state) do
         if s.taken > 0 then
             local b = P.Breakdown(s.levels, s.taken)
             b.itemID = id
             parts[#parts + 1] = b
         end
     end
-    if NPP.Shop and NPP.Started("shop") then
+    local from, to = picked[1].from, picked[#picked].to
+    NPP.Print(L("Shopping list: %d crafts, steps %d-%d."), crafts, from, to)
+    if short > 0 then NPP.Print(L("%d crafts had no reagents left on the market."), short) end
+    if #parts == 0 then
+        NPP.Print(L("Nothing to buy: your bags have it all."))
+    elseif NPP.Shop and NPP.Started("shop") then
         if NPP.Shop.AddPlan({ parts = parts }) and NPP.Live and NPP.Live.Open() then NPP.Shop.ShowPanel(true) end
     end
+    -- what to learn for these steps: their recipes, and the ranks below the last step
+    local need = {}
+    for _, seg in ipairs(picked) do need[seg.c] = true end
     for _, c in ipairs(result.toLearn) do
-        local src = c.sources[1]
-        NPP.Print(L("Learn first: %s (%s, %s)."), c.name, Leveling.SourceText(src), NPP.Coins(c.learnCost))
+        if need[c] or (c.rank and (c.rankFrom or 0) < to) then
+            local src = c.sources[1]
+            NPP.Print(L("Learn first: %s (%s, %s)."), c.name, Leveling.SourceText(src), NPP.Coins(c.learnCost))
+        end
     end
+end
+
+-- A row click: tick or untick the step; Shift: every step from the first up to it.
+function Leveling.Pick(i)
+    if not (result and result.segments and result.segments[i]) then return end
+    result.picked = result.picked or {}
+    if IsShiftKeyDown() then
+        local on = not result.picked[i]
+        for k = 1, i do result.picked[k] = on or nil end
+    else
+        result.picked[i] = (not result.picked[i]) or nil
+    end
+    Leveling.Render()
 end
 
 function Leveling.ToQueue()
@@ -757,8 +825,14 @@ function Leveling.ToQueue()
     if not (Q and type(Q.Add) == "function") then return NPP.Print(L("Naowh's crafting queue is not available.")) end
     local mine = type(Q.List) == "function" and Q.List() or nil
     local bits, later, enchants = {}, {}, {}
+    -- ticked steps only, when some are ticked
+    local picked, wanted = Picked(), nil
+    if #picked > 0 then
+        wanted = {}
+        for _, seg in ipairs(picked) do wanted[seg.c] = (wanted[seg.c] or 0) + seg.crafts end
+    end
     for _, c in ipairs(result.cands) do
-        local want = c.done or 0
+        local want = wanted and (wanted[c] or 0) or (c.done or 0)
         if want > 0 and c.enchant then
             -- the queue cannot pick the item an enchant goes on
             enchants[#enchants + 1] = ("%dx %s"):format(want, c.name)
@@ -1011,6 +1085,13 @@ local function Build()
             fs:SetWordWrap(false)
             row.cells[j] = fs
         end
+        local sel = row:CreateTexture(nil, "BORDER")
+        sel:SetAllPoints()
+        sel:SetColorTexture(0.2, 0.6, 1, 0.12)
+        sel:Hide()
+        row.sel = sel
+        row.index = i
+        row:SetScript("OnClick", function(self) NPP.Safe("leveling pick", Leveling.Pick, self.index) end)
         row:SetScript("OnEnter", RowTooltip)
         row:SetScript("OnLeave", GameTooltip_Hide)
         rows[i] = row
@@ -1078,7 +1159,9 @@ function Leveling.Render()
         row.seg = seg
         if seg then
             local c = row.cells
-            c[1]:SetText(("%d-%d"):format(seg.from, seg.to))
+            local on = r.picked and r.picked[i]
+            c[1]:SetText((on and BOX_ON or BOX_OFF) .. ("%d-%d"):format(seg.from, seg.to))
+            row.sel:SetShown(on and true or false)
             local e = seg.c.enchant
             c[2]:SetText((seg.c.learned and "" or (GOLD .. "* |r")) .. seg.c.name
                 .. ((e and not e.have) and ("|cffff6060 (" .. L("no %s"):format(e.name) .. ")|r") or ""))
@@ -1119,6 +1202,9 @@ function Leveling.Render()
         if r.alt then
             text = text .. "\n" .. GREY .. L("%s's profession as saved when that character last logged in; learned recipes as Naowh remembers them. Buy here, send by mail.")
                 :format(r.who or "?") .. "|r"
+        end
+        if #segs > 0 then
+            text = text .. "\n" .. GOLD .. L("Click a step to tick it for the shopping list and the queue; Shift-click: every step up to it.") .. "|r"
         end
         if r.estimated then
             text = text .. "\n" .. GOLD .. L("%s's skill is a guess from the recipes learned (about %d): log in with %s once, or type it with \"From\".")
@@ -1188,6 +1274,11 @@ function Leveling.Render()
     for _, k in ipairs({ "from", "minus", "target", "plus", "vendor", "ah", "recipesAH" }) do switches = switches + buttons[k]:GetWidth() + 4 end
     frame:SetWidth(math.max(PAD * 2 + width, PAD * 2 + switches + 10, tabsRight + PAD + 30, 640))
     local has = r and r.segments and #r.segments > 0
+    local n = #Picked()
+    SetLabel(buttons.shop, n > 0 and L("To shopping list (%d)"):format(n) or L("To shopping list"))
+    SetLabel(buttons.queue, n > 0 and L("To craft queue (%d)"):format(n) or L("To craft queue"))
+    NPP.FitButton(buttons.shop, 140)
+    NPP.FitButton(buttons.queue, 140)
     SetEnabled(buttons.shop, has and true or false)
     SetEnabled(buttons.queue, has and true or false)
 end
