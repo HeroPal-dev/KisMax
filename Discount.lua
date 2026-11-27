@@ -1,6 +1,6 @@
 -- Discount.lua: the Legacy perk that lowers merchant prices (10%). Found in the Legacy trees the way Master Chef
 -- is (Chef.EachNode): a node whose name, or its spell's description, speaks of merchants and prices. Its percent
--- comes from the description (the first "N%"), 10 when there is none; a perk with several ranks counts N per rank.
+-- comes from the description (the first "N%"): on Forever 2 ranks of 5%, so 5 per rank, 10 in all.
 -- Setting merchantDiscount: "auto" (the perk), or 0-50 typed by hand (/km discount).
 -- Used for: merchant reagents in every price (Naowh's built-in list prices, minus the discount; prices Naowh saw at
 -- a merchant are shown prices, the discount already in them) and recipes bought from merchants in the levelling plan.
@@ -10,7 +10,8 @@ local L = NPP.L
 local Discount = {}
 NPP.Discount = Discount
 
-local DEFAULT_PCT = 10
+local DEFAULT_PCT = 10   -- the whole perk
+local PER_RANK_PCT = 5   -- one rank of it (2 ranks)
 local MAX_PCT = 50
 -- names: matched in the name and its lower-cased copy (string.lower changes ASCII letters only)
 local NAME_PATTERNS = { "bargain", "haggl", "barter", "discount", "merchant", "vendor", "thrift",
@@ -63,9 +64,13 @@ function Discount.Auto()
     if okC and configID then ok, info = pcall(C_Traits.GetNodeInfo, configID, found.node) end
     if not ok or type(info) ~= "table" then return end
     local ranks, maxRanks = info.activeRank or info.currentRank or 0, info.maxRanks or 1
-    local per = tonumber(found.desc and found.desc:match("(%d+)%%")) or DEFAULT_PCT
+    -- the perk on Forever: 2 ranks of 5% (10% in all). The spell's description gives one rank's percent.
+    local per = tonumber(found.desc and found.desc:match("(%d+)%%"))
+    if not per or per <= 0 then per = maxRanks > 1 and PER_RANK_PCT or DEFAULT_PCT end
+    -- a description that shows the whole perk (10% at 2 ranks) would count twice: never above 5% per rank there
+    if maxRanks > 1 and per * maxRanks > DEFAULT_PCT then per = DEFAULT_PCT / maxRanks end
     local pct = ranks > 0 and per * (maxRanks > 1 and ranks or 1) or 0
-    return math.min(MAX_PCT, pct), ranks, maxRanks, found.name
+    return math.min(MAX_PCT, pct), ranks, maxRanks, found.name, per
 end
 
 -- Percent used in the math, and where it came from: "manual", "auto" or "none".
@@ -91,8 +96,9 @@ function Discount.Text()
     local pct, how = Discount.Percent()
     if how == "manual" then return L("%d%% (typed by hand)"):format(pct) end
     if how == "auto" then
-        local _, ranks, maxRanks, name = Discount.Auto()
-        return L("%d%% (perk \"%s\", rank %d/%d)"):format(pct, name or "?", ranks or 0, maxRanks or 1)
+        local _, ranks, maxRanks, name, per = Discount.Auto()
+        return L("%d%% (perk \"%s\", rank %d/%d, %s%% each)"):format(pct, name or "?", ranks or 0, maxRanks or 1,
+            tostring(per or "?"))
     end
     return L("none (perk not found or not taken)")
 end
