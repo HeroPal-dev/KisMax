@@ -146,7 +146,14 @@ function PS.Vendor(itemID)
     if cached ~= nil then return cached or nil end
     local V = NPP.P and NPP.P.Vendors
     local ok, value = false, nil
-    if V and V.Price then ok, value = pcall(V.Price, itemID) end
+    -- Naowh's built-in list price, minus your merchant discount (Legacy perk); a price Naowh saw at a merchant
+    -- (when there is no list price) is what that merchant asked, the discount already in it
+    local list = NPP.P and type(NPP.P.VendorPrices) == "table" and NPP.P.VendorPrices[itemID]
+    if type(list) == "number" and list > 0 then
+        ok, value = true, list * (NPP.Discount and NPP.Discount.Factor() or 1)
+    elseif V and V.Price then
+        ok, value = pcall(V.Price, itemID)
+    end
     value = ok and type(value) == "number" and value > 0 and value or nil
     vendorCache[itemID] = value or NONE
     return value

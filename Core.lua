@@ -22,6 +22,7 @@ NPP.DEFAULTS = {
     tsmFallback = true,     -- the chosen source has no price -> our scan, then the Naowh scan
     depthPct = 10,          -- "depth" price: the price below which this % of the listed quantity sits
     saleChannel = "best",   -- "best" | "ah" | "vendor"
+    merchantDiscount = "auto", -- merchant prices: "auto" (the Legacy perk) or a percent typed by hand
     chefPoints = "auto",    -- Master Chef ranks: "auto" (read from the Legacy tree) or 0-5
     chefCount = true,       -- count Master Chef's extra results (the "overproduction") in the yield
     chefTree = false,       -- pinned Legacy tree / node of Master Chef (/km chefnode)

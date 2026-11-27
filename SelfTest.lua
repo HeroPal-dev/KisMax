@@ -56,7 +56,7 @@ function SelfTest.Run()
         if NPP.Compat.Ready({ f }) then state = true elseif f == "core" then state = false end
         Line(state, L("Feature %s"), f)
     end
-    local mods = { "profit", "chef", "disenchant", "ledger", "planpanel", "explorer", "history", "session", "leveling",
+    local mods = { "profit", "chef", "discount", "disenchant", "ledger", "planpanel", "explorer", "history", "session", "leveling",
         "shop", "hub", "ui", "sort", "filters", "scan", "live", "sell", "pricefloor", "cheap" }
     local off = {}
     for _, m in ipairs(mods) do
@@ -92,6 +92,10 @@ function SelfTest.Run()
         makes == 0 and (" (" .. L("open each profession once") .. ")") or "")
     Line(true, L("Enchanting %d, Master Chef ranks %s"), NPP.DE and NPP.DE.Skill() or 0,
         tostring(NPP.Chef and NPP.Chef.Ranks and NPP.Chef.Ranks() or "-"))
+    if NPP.Discount then
+        local pct, how = NPP.Discount.Percent()
+        Line(how ~= "none" or nil, L("Merchant discount: %s."), NPP.Discount.Text())
+    end
 
     -- our records
     local days, shop, sell = 0, 0, 0

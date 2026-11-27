@@ -17,6 +17,7 @@ local function Help()
     NPP.Print(L("  /km minprofit <gold>|off, /km minroi <percent>|off, /km hideunknown"))
     NPP.Print(L("  /km channel best|ah|vendor|de - where the result is sold (de: disenchant it)"))
     NPP.Print(L("  /km chef auto|0-5, /km overprod (count Master Chef extras), /km perks [text], /km chefnode <id>|auto"))
+    NPP.Print(L("  /km discount [auto|0-50] - merchant discount (Legacy perk): found by itself, or typed"))
     NPP.Print(L("  /km source auto|depth|tsm|tsmmarket|tsmmin|naowh, /km tsmprice <TSM price>"))
     NPP.Print(L("  /km depth <percent>, /km demand on|off|<days>, /km planmax <crafts>"))
     NPP.Print(L("  /km budget auto|off|<gold> - money a plan may spend"))
@@ -314,6 +315,19 @@ local function Handle(msg)
         end
         local ranks, how = NPP.Chef.Ranks()
         NPP.Print(L("Master Chef: %d ranks (%s)."), ranks, how)
+    elseif cmd == "discount" then
+        local n = tonumber(rest)
+        if rest == "auto" then
+            NPP.Set("merchantDiscount", "auto")
+            if NPP.Discount then NPP.Discount.Rescan() end
+        elseif n and n >= 0 and n <= 50 then
+            NPP.Set("merchantDiscount", math.floor(n))
+        elseif rest ~= "" then
+            return NPP.Print("/km discount auto|0-50")
+        end
+        if NPP.PriceSource then NPP.PriceSource.ClearCache() end
+        if NPP.Profit then NPP.Profit.ClearCache() end
+        NPP.Print(L("Merchant discount: %s."), NPP.Discount.Text())
     elseif cmd == "overprod" then
         NPP.Set("chefCount", not NPP.Get("chefCount"))
         NPP.Print(L("Master Chef extra results counted %s."), OnOff(NPP.Get("chefCount")))

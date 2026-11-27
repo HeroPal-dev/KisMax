@@ -159,6 +159,13 @@ local function ChefText(v)
     return ranks and L("auto: %d"):format(ranks) or L("auto: not found")
 end
 
+local DISCOUNTS = { "auto", 0, 5, 10, 15, 20 }
+local function DiscountText(v)
+    if v ~= "auto" then return v .. "%" end
+    local pct = NPP.Discount and NPP.Discount.Auto and NPP.Discount.Auto()
+    return pct and L("auto: %d%%"):format(pct) or L("auto: not found")
+end
+
 local LANGS = { "auto", "ru", "en" }
 local LANG_TEXT = { auto = "Game language", ru = "Russian", en = "English" }
 
@@ -185,6 +192,8 @@ local SETTINGS = {
       text = function(v) return L(INTER_TEXT[v] or v) end, help = "INTER_HELP" },
     { kind = "toggle", key = "planPanel", label = "Buy plan panel under the window" },
     { kind = "toggle", key = "plansOnlyAtAH", label = "List plans follow bags only at the AH", help = "ATAH_HELP" },
+    { kind = "cycle", key = "merchantDiscount", label = "Merchant discount (Legacy perk)", values = DISCOUNTS,
+      text = DiscountText, help = "DISCOUNT_HELP" },
     { header = "Master Chef (cooking)" },
     { kind = "cycle", key = "chefPoints", label = "Ranks", values = CHEF, text = ChefText },
     { kind = "toggle", key = "chefCount", label = "Count overproduction (extra results)", help = "CHEF_HELP" },

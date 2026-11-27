@@ -442,6 +442,15 @@ local RU = {
     ["Where to learn:"] = "Где изучить:",
     ["gear"] = "вещь",
     ["From: %d"] = "От: %d",
+    ["Merchant discount (Legacy perk)"] = "Скидка у торговцев (перк Наследия)",
+    ["auto: %d%%"] = "авто: %d%%",
+    ["%d%% (typed by hand)"] = "%d%% (задано вручную)",
+    ["%d%% (perk \"%s\", rank %d/%d)"] = "%d%% (перк «%s», ранг %d/%d)",
+    ["none (perk not found or not taken)"] = "нет (перк не найден или не взят)",
+    ["Merchant discount: %s."] = "Скидка у торговцев: %s.",
+    ["  /km discount [auto|0-50] - merchant discount (Legacy perk): found by itself, or typed"] =
+        "  /km discount [auto|0-50] - скидка у торговцев (перк Наследия): сама или вручную",
+    ["DISCOUNT_HELP"] = "Перк Наследия, снижающий цены торговцев. «Авто» находит его в дереве и берёт процент из описания. Учитывается в цене реагентов от торговцев и рецептов у торговцев в плане прокачки. Если «не найден» — /km perks покажет узлы дерева, а процент можно выбрать вручную.",
     ["To shopping list (%d)"] = "В список покупок (%d)",
     ["To craft queue (%d)"] = "В очередь крафта (%d)",
     ["Tick the steps to buy for: click a row (Shift-click: every step up to it)."] =
@@ -776,6 +785,9 @@ local RU = {
 
 -- Long help texts are looked up by key; English text for those keys.
 local EN = {
+    DISCOUNT_HELP = "The Legacy perk that lowers merchant prices. Auto finds it in the tree and takes the percent from its description. "
+        .. "Counted in merchant reagent prices and in merchant recipes in the levelling plan. Not found: /km perks lists the tree's nodes; "
+        .. "or pick the percent by hand.",
     CHEF_HELP = "Each rank: +10% chance that a cooking craft gives one more item (a recipe making 2 gives 3). "
         .. "On: yield and profit use the average with these extra results. Off: only the base result.",
     DEMAND_HELP = "TSM region sold per day (all Forever realms of the region), times the days set with "

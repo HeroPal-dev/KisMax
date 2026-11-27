@@ -306,7 +306,7 @@ local function RankSteps(profID, cap, target)
             if type(rank.vendors) == "table" then
                 for _, v in ipairs(rank.vendors) do
                     if Mine(v[3]) and tonumber(v[7]) then
-                        sources[#sources + 1] = { kind = "vendor", name = v[2], map = v[4], x = v[5], y = v[6], price = tonumber(v[7]) }
+                        sources[#sources + 1] = { kind = "vendor", name = v[2], map = v[4], x = v[5], y = v[6], price = tonumber(v[7]) and math.floor(tonumber(v[7]) * (NPP.Discount and NPP.Discount.Factor() or 1)) }
                         cost = tonumber(v[7])
                     end
                 end
@@ -348,7 +348,7 @@ local function Sources(r, profData)
     if kind == "vendor" and type(r.vendors) == "table" then
         for _, v in ipairs(r.vendors) do
             if Mine(v[3]) and tonumber(v[7]) then
-                list[#list + 1] = { kind = "vendor", name = v[2], map = v[4], x = v[5], y = v[6], price = tonumber(v[7]) }
+                list[#list + 1] = { kind = "vendor", name = v[2], map = v[4], x = v[5], y = v[6], price = tonumber(v[7]) and math.floor(tonumber(v[7]) * (NPP.Discount and NPP.Discount.Factor() or 1)) }
             end
         end
     end
